@@ -2,7 +2,7 @@
 
 namespace Wslhub.Sdk
 {
-    [Flags, Serializable]
+    [Flags]
     public enum DistroFlags
     {
         None = 0x0,

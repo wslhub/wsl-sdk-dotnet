@@ -8,29 +8,56 @@ namespace Wslhub.Sdk
 {
     public static class Wsl
     {
+        private static bool InternalCheckIsWow64()
+        {
+            var osvi = new NativeMethods.OSVERSIONINFOEXW();
+            osvi.dwOSVersionInfoSize = (uint)Marshal.SizeOf(osvi);
+
+            if (NativeMethods.GetVersionExW(ref osvi))
+            {
+                if ((osvi.dwMajorVersion == 5 && osvi.dwMinorVersion >= 1) ||
+                    osvi.dwMajorVersion >= 6)
+                {
+                    if (NativeMethods.IsWow64Process(NativeMethods.GetCurrentProcess(), out bool retVal))
+                        return retVal;
+                }
+            }
+
+            return false;
+        }
+
         public static void AssertWslSupported()
         {
             var commonErrorMessage = "Windows Subsystems for Linux requires 64-bit system and latest version of Windows 10 or higher than Windows Server 1709.";
 
-            if (!Environment.Is64BitOperatingSystem || !Environment.Is64BitProcess)
+            var is64BitProcess = (IntPtr.Size == 8);
+            var is64BitOperatingSystem = is64BitProcess || InternalCheckIsWow64();
+
+            if (!is64BitOperatingSystem || !is64BitProcess)
                 throw new PlatformNotSupportedException(commonErrorMessage);
 
-            var osVersion = Environment.OSVersion;
+            var osvi = new NativeMethods.OSVERSIONINFOEXW();
+            osvi.dwOSVersionInfoSize = (uint)Marshal.SizeOf(osvi);
 
-            if (osVersion.Platform != PlatformID.Win32NT)
+            if (!NativeMethods.GetVersionExW(ref osvi))
                 throw new PlatformNotSupportedException(commonErrorMessage);
 
-            var versionNumber = osVersion.Version;
-
-            if (versionNumber.Major < 10 ||
-                versionNumber.Minor < 0 ||
-                versionNumber.Build < 16299)
+            if (osvi.dwPlatformId != 2)
                 throw new PlatformNotSupportedException(commonErrorMessage);
 
-            if (!File.Exists(Path.Combine(Environment.SystemDirectory, "wslapi.dll")))
+            if (osvi.dwMajorVersion < 10 ||
+                osvi.dwMinorVersion < 0 ||
+                osvi.dwBuildNumber < 16299)
+                throw new PlatformNotSupportedException(commonErrorMessage);
+
+            var systemDirectory = Path.Combine(
+                Environment.GetEnvironmentVariable("WINDIR"),
+                "system32");
+
+            if (!File.Exists(Path.Combine(systemDirectory, "wslapi.dll")))
                 throw new NotSupportedException("This system does not have WSL enabled.");
 
-            if (!File.Exists(Path.Combine(Environment.SystemDirectory, "wsl.exe")))
+            if (!File.Exists(Path.Combine(systemDirectory, "wsl.exe")))
                 throw new NotSupportedException("This system does not have wsl.exe CLI.");
         }
 
@@ -39,42 +66,46 @@ namespace Wslhub.Sdk
             var currentUser = Registry.CurrentUser;
             var lxssPath = Path.Combine("SOFTWARE", "Microsoft", "Windows", "CurrentVersion", "Lxss");
 
-            using var lxssKey = currentUser.OpenSubKey(lxssPath, false);
-            var defaultGuid = lxssKey.GetValue("DefaultDistribution", default(string)) as string;
-            var defaultGuidFound = Guid.TryParse(defaultGuid, out Guid parsedDefaultGuid);
-            var results = new List<DistroRegistryInfo>();
-
-            foreach (var keyName in lxssKey.GetSubKeyNames())
+            using (var lxssKey = currentUser.OpenSubKey(lxssPath, false))
             {
-                if (!Guid.TryParse(keyName, out Guid parsedGuid))
-                    continue;
+                var defaultGuid = lxssKey.GetValue("DefaultDistribution", default(string)) as string;
+                var defaultGuidFound = Guid.TryParse(defaultGuid, out Guid parsedDefaultGuid);
+                var results = new List<DistroRegistryInfo>();
 
-                using var distroKey = lxssKey.OpenSubKey(keyName);
-                var distroName = distroKey.GetValue("DistributionName", default(string)) as string;
-
-                if (string.IsNullOrWhiteSpace(distroName))
-                    continue;
-
-                var basePath = distroKey.GetValue("BasePath", default(string)) as string;
-                var normalizedPath = Path.GetFullPath(basePath);
-
-                var kernelCommandLine = (distroKey.GetValue("KernelCommandLine", default(string)) as string ?? string.Empty);
-                var result = new DistroRegistryInfo()
+                foreach (var keyName in lxssKey.GetSubKeyNames())
                 {
-                    DistroId = parsedGuid,
-                    DistroName = distroName,
-                    BasePath = basePath,
-                };
-                result.KernelCommandLine.AddRange(kernelCommandLine.Split(
-                    new char[] { ' ', '\t', },
-                    StringSplitOptions.RemoveEmptyEntries));
+                    if (!Guid.TryParse(keyName, out Guid parsedGuid))
+                        continue;
 
-                if (defaultGuidFound && parsedDefaultGuid == parsedGuid)
-                    result.IsDefault = true;
-                results.Add(result);
+                    using (var distroKey = lxssKey.OpenSubKey(keyName))
+                    {
+                        var distroName = distroKey.GetValue("DistributionName", default(string)) as string;
+
+                        if (string.IsNullOrWhiteSpace(distroName))
+                            continue;
+
+                        var basePath = distroKey.GetValue("BasePath", default(string)) as string;
+                        var normalizedPath = Path.GetFullPath(basePath);
+
+                        var kernelCommandLine = (distroKey.GetValue("KernelCommandLine", default(string)) as string ?? string.Empty);
+                        var result = new DistroRegistryInfo()
+                        {
+                            DistroId = parsedGuid,
+                            DistroName = distroName,
+                            BasePath = basePath,
+                        };
+                        result.KernelCommandLine.AddRange(kernelCommandLine.Split(
+                            new char[] { ' ', '\t', },
+                            StringSplitOptions.RemoveEmptyEntries));
+
+                        if (defaultGuidFound && parsedDefaultGuid == parsedGuid)
+                            result.IsDefault = true;
+                        results.Add(result);
+                    }
+                }
+
+                return results;
             }
-
-            return results;
         }
 
         public unsafe static IEnumerable<DistroInfo> GetDistroQueryResult()
