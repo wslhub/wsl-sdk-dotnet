@@ -3,11 +3,29 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Wslhub.Sdk
 {
     public static class Wsl
     {
+        public static void InitializeSecurityModel()
+        {
+            var result = NativeMethods.CoInitializeSecurity(
+                IntPtr.Zero,
+                (-1),
+                IntPtr.Zero,
+                IntPtr.Zero,
+                NativeMethods.RpcAuthnLevel.Default,
+                NativeMethods.RpcImpLevel.Impersonate,
+                IntPtr.Zero,
+                NativeMethods.EoAuthnCap.StaticCloaking,
+                IntPtr.Zero);
+
+            if (result != 0)
+                throw new COMException("Cannot complete CoInitializeSecurity.", result);
+        }
+
         private static bool InternalCheckIsWow64()
         {
             var osvi = new NativeMethods.OSVERSIONINFOEXW();
@@ -159,6 +177,74 @@ namespace Wslhub.Sdk
             }
 
             return results;
+        }
+
+        public static string RunWslCommand(string distroName, string commandLine)
+        {
+            var isRegistered = NativeMethods.WslIsDistributionRegistered(distroName);
+
+            if (!isRegistered)
+                throw new Exception($"{distroName} is not registered distro.");
+
+            var stdin = NativeMethods.GetStdHandle(NativeMethods.STD_INPUT_HANDLE);
+            var stdout = NativeMethods.GetStdHandle(NativeMethods.STD_OUTPUT_HANDLE);
+            var stderr = NativeMethods.GetStdHandle(NativeMethods.STD_ERROR_HANDLE);
+
+            var attributes = new NativeMethods.SECURITY_ATTRIBUTES
+            {
+                lpSecurityDescriptor = IntPtr.Zero,
+                bInheritHandle = true,
+            };
+            attributes.nLength = Marshal.SizeOf(attributes);
+
+            if (NativeMethods.CreatePipe(out IntPtr readPipe, out IntPtr writePipe, ref attributes, 0))
+            {
+                try
+                {
+                    var hr = NativeMethods.WslLaunch(distroName, commandLine, false, stdin, writePipe, stderr, out IntPtr child);
+
+                    if (hr >= 0)
+                    {
+                        NativeMethods.WaitForSingleObject(child, NativeMethods.INFINITE);
+                        if ((NativeMethods.GetExitCodeProcess(child, out int exitCode) == false) || (exitCode != 0))
+                        {
+                            hr = NativeMethods.E_INVALIDARG;
+                        }
+
+                        NativeMethods.CloseHandle(child);
+
+                        if (hr >= 0)
+                        {
+                            // TODO: Support larger output (more than 64K)
+                            var length = 65536;
+                            var buffer = Marshal.AllocHGlobal(length);
+                            NativeMethods.FillMemory(buffer, length, 0x00);
+
+                            var read = 0;
+                            var readFileResult = NativeMethods.ReadFile(readPipe, buffer, length - 1, out read, IntPtr.Zero);
+                            var lastError = Marshal.GetLastWin32Error();
+
+                            var passwdContents = new StringBuilder();
+                            passwdContents.Append(Marshal.PtrToStringAnsi(buffer, read));
+
+                            Marshal.FreeHGlobal(buffer);
+                            return passwdContents.ToString();
+                        }
+                        else
+                            throw new COMException("Cannot obtain output stream", hr);
+                    }
+                    else
+                        throw new COMException("Cannot launch WSL process", hr);
+                }
+                catch { throw; }
+                finally
+                {
+                    NativeMethods.CloseHandle(readPipe);
+                    NativeMethods.CloseHandle(writePipe);
+                }
+            }
+            else
+                throw new Exception("Cannot create pipe for I/O.");
         }
     }
 }
