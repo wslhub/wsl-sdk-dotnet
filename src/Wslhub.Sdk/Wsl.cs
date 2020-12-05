@@ -148,7 +148,7 @@ namespace Wslhub.Sdk
                 if (!distro.IsRegistered)
                     continue;
 
-                distro.HResult = NativeMethods.WslGetDistributionConfiguration(
+                var hr = NativeMethods.WslGetDistributionConfiguration(
                     eachItem.DistroName,
                     out int distroVersion,
                     out int defaultUserId,
@@ -156,7 +156,7 @@ namespace Wslhub.Sdk
                     out IntPtr environmentVariables,
                     out int environmentVariableCount);
 
-                if (!distro.Succeed)
+                if (hr != 0)
                     continue;
 
                 distro.WslVersion = distroVersion;
@@ -220,15 +220,14 @@ namespace Wslhub.Sdk
                             var buffer = Marshal.AllocHGlobal(length);
                             NativeMethods.FillMemory(buffer, length, 0x00);
 
-                            var read = 0;
-                            var readFileResult = NativeMethods.ReadFile(readPipe, buffer, length - 1, out read, IntPtr.Zero);
+                            var readFileResult = NativeMethods.ReadFile(readPipe, buffer, length - 1, out int read, IntPtr.Zero);
                             var lastError = Marshal.GetLastWin32Error();
 
-                            var passwdContents = new StringBuilder();
-                            passwdContents.Append(Marshal.PtrToStringAnsi(buffer, read));
+                            var outputContents = new StringBuilder();
+                            outputContents.Append(Marshal.PtrToStringAnsi(buffer, read));
 
                             Marshal.FreeHGlobal(buffer);
-                            return passwdContents.ToString();
+                            return outputContents.ToString();
                         }
                         else
                             throw new COMException("Cannot obtain output stream", hr);
