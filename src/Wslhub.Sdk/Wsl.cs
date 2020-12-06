@@ -219,6 +219,95 @@ namespace Wslhub.Sdk
             return results;
         }
 
+        public static unsafe long RunWslCommand(string distroName, string commandLine, Stream outputStream, int bufferLength = 65536)
+        {
+            var isRegistered = NativeMethods.WslIsDistributionRegistered(distroName);
+
+            if (!isRegistered)
+                throw new Exception($"{distroName} is not registered distro.");
+
+            var stdin = NativeMethods.GetStdHandle(NativeMethods.STD_INPUT_HANDLE);
+            var stderr = NativeMethods.GetStdHandle(NativeMethods.STD_ERROR_HANDLE);
+
+            var attributes = new NativeMethods.SECURITY_ATTRIBUTES
+            {
+                lpSecurityDescriptor = IntPtr.Zero,
+                bInheritHandle = true,
+            };
+            attributes.nLength = Marshal.SizeOf(attributes);
+
+            if (!NativeMethods.CreatePipe(out IntPtr readPipe, out IntPtr writePipe, ref attributes, 0))
+                throw new Exception("Cannot create pipe for I/O.");
+
+            try
+            {
+                var hr = NativeMethods.WslLaunch(distroName, commandLine, false, stdin, writePipe, stderr, out IntPtr child);
+
+                if (hr < 0)
+                    throw new COMException("Cannot launch WSL process", hr);
+
+                NativeMethods.WaitForSingleObject(child, NativeMethods.INFINITE);
+
+                if (!NativeMethods.GetExitCodeProcess(child, out int exitCode))
+                {
+                    var lastError = Marshal.GetLastWin32Error();
+                    NativeMethods.CloseHandle(child);
+                    throw new Win32Exception(lastError, "Cannot query exit code of the process.");
+                }
+
+                if (exitCode != 0)
+                {
+                    NativeMethods.CloseHandle(child);
+                    throw new Exception($"Process exit code is non-zero: {exitCode}");
+                }
+
+                NativeMethods.CloseHandle(child);
+                bufferLength = Math.Min(bufferLength, 1024);
+
+                var bufferPointer = Marshal.AllocHGlobal(bufferLength);
+                var pBufferPointer = (byte*)bufferPointer.ToPointer();
+
+                var buffer = new byte[bufferLength];
+
+                var length = 0L;
+                var read = 0;
+
+                while (true)
+                {
+                    if (!NativeMethods.ReadFile(readPipe, bufferPointer, bufferLength, out read, IntPtr.Zero))
+                    {
+                        var lastError = Marshal.GetLastWin32Error();
+                        Marshal.FreeHGlobal(bufferPointer);
+
+                        if (lastError != 0)
+                            throw new Win32Exception(lastError, "Cannot read data from pipe.");
+
+                        break;
+                    }
+
+                    fixed (byte* pBuffer = buffer)
+                    {
+                        Buffer.MemoryCopy(pBufferPointer, pBuffer, read, read);
+                        length += read;
+                    }
+                    outputStream.Write(buffer, 0, read);
+
+                    if (read < bufferLength)
+                    {
+                        Marshal.FreeHGlobal(bufferPointer);
+                        break;
+                    }
+                }
+
+                return length;
+            }
+            finally
+            {
+                NativeMethods.CloseHandle(readPipe);
+                NativeMethods.CloseHandle(writePipe);
+            }
+        }
+
         public static unsafe string RunWslCommand(string distroName, string commandLine, int bufferLength = 65536)
         {
             var isRegistered = NativeMethods.WslIsDistributionRegistered(distroName);
@@ -248,13 +337,20 @@ namespace Wslhub.Sdk
 
                 NativeMethods.WaitForSingleObject(child, NativeMethods.INFINITE);
 
-                if ((NativeMethods.GetExitCodeProcess(child, out int exitCode) == false) || (exitCode != 0))
-                    hr = NativeMethods.E_INVALIDARG;
+                if (!NativeMethods.GetExitCodeProcess(child, out int exitCode))
+                {
+                    var lastError = Marshal.GetLastWin32Error();
+                    NativeMethods.CloseHandle(child);
+                    throw new Win32Exception(lastError, "Cannot query exit code of the process.");
+                }
+
+                if (exitCode != 0)
+                {
+                    NativeMethods.CloseHandle(child);
+                    throw new Exception($"Process exit code is non-zero: {exitCode}");
+                }
 
                 NativeMethods.CloseHandle(child);
-
-                if (hr < 0)
-                    throw new COMException("Cannot obtain output stream", hr);
 
                 bufferLength = Math.Min(bufferLength, 1024);
                 var bufferPointer = Marshal.AllocHGlobal(bufferLength);

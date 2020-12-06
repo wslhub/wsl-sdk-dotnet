@@ -1,7 +1,10 @@
 ﻿#pragma warning disable IDE0051 // Remove unused private members
 
 using System;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Text;
 
 namespace Wslhub.Sdk.Test
 {
@@ -48,6 +51,26 @@ namespace Wslhub.Sdk.Test
 
             if (outputContent.Length == 0)
                 throw new Exception("No output.");
+        }
+
+        static void Test_ExecTest_OutputStream()
+        {
+            using var outputStream = new MemoryStream();
+            var outputLength = Wsl.GetDefaultDistro().RunWslCommand("ls /dev | gzip -", outputStream);
+
+            if (outputLength == 0)
+                throw new Exception("No output.");
+
+            outputStream.Seek(0L, SeekOrigin.Begin);
+            using var gzStream = new GZipStream(outputStream, CompressionMode.Decompress, true);
+            using var streamReader = new StreamReader(gzStream, new UTF8Encoding(false), false);
+            var content = streamReader.ReadToEnd();
+
+            if (string.IsNullOrWhiteSpace(content))
+                throw new Exception("No output.");
+
+            if (!content.Contains("null"))
+                throw new Exception("Invalid output.");
         }
     }
 }

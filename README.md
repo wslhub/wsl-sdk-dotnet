@@ -17,6 +17,8 @@ Due to the limitation of COM security model requirements of WSL APIs, you can no
 
 ## Code Example
 
+### Basic Usage
+
 ```csharp
 using Wslhub.Sdk;
 
@@ -40,7 +42,18 @@ var defaultDistro = Wsl.GetDefaultDistro();
 var result = defaultDistro.RunWslCommand("cat /etc/passwd");
 ```
 
-## Upcoming Features
+### Stream Redirection
 
-- Aware default distro
-- Executing WSL commands via C# API (supporting more longer CLOBs)
+```csharp
+using var outputStream = new MemoryStream();
+
+var defaultDistro = Wsl.GetDefaultDistro();
+defaultDistro.RunWslCommand("ls /dev | gzip -", outputStream);
+
+outputStream.Seek(0L, SeekOrigin.Begin);
+using var gzStream = new GZipStream(outputStream, CompressionMode.Decompress, true);
+using var streamReader = new StreamReader(gzStream, new UTF8Encoding(false), false);
+var content = streamReader.ReadToEnd();
+
+Console.Out.WriteLine(content);
+```
