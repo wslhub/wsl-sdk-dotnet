@@ -121,16 +121,6 @@ namespace Wslhub.Sdk
 
         [DllImport("kernel32.dll",
             CallingConvention = CallingConvention.Winapi,
-            SetLastError = false,
-            EntryPoint = "RtlFillMemory",
-            ExactSpelling = true)]
-        public static extern void FillMemory(
-            IntPtr destination,
-            [MarshalAs(UnmanagedType.U4)] int length,
-            byte fill);
-
-        [DllImport("kernel32.dll",
-            CallingConvention = CallingConvention.Winapi,
             SetLastError = true,
             ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.Bool)]

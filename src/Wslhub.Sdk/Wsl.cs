@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -179,7 +180,7 @@ namespace Wslhub.Sdk
             return results;
         }
 
-        public static string RunWslCommand(string distroName, string commandLine)
+        public static unsafe string RunWslCommand(string distroName, string commandLine, int bufferLength = 65536)
         {
             var isRegistered = NativeMethods.WslIsDistributionRegistered(distroName);
 
@@ -187,7 +188,6 @@ namespace Wslhub.Sdk
                 throw new Exception($"{distroName} is not registered distro.");
 
             var stdin = NativeMethods.GetStdHandle(NativeMethods.STD_INPUT_HANDLE);
-            var stdout = NativeMethods.GetStdHandle(NativeMethods.STD_OUTPUT_HANDLE);
             var stderr = NativeMethods.GetStdHandle(NativeMethods.STD_ERROR_HANDLE);
 
             var attributes = new NativeMethods.SECURITY_ATTRIBUTES
@@ -197,53 +197,61 @@ namespace Wslhub.Sdk
             };
             attributes.nLength = Marshal.SizeOf(attributes);
 
-            if (NativeMethods.CreatePipe(out IntPtr readPipe, out IntPtr writePipe, ref attributes, 0))
-            {
-                try
-                {
-                    var hr = NativeMethods.WslLaunch(distroName, commandLine, false, stdin, writePipe, stderr, out IntPtr child);
-
-                    if (hr >= 0)
-                    {
-                        NativeMethods.WaitForSingleObject(child, NativeMethods.INFINITE);
-                        if ((NativeMethods.GetExitCodeProcess(child, out int exitCode) == false) || (exitCode != 0))
-                        {
-                            hr = NativeMethods.E_INVALIDARG;
-                        }
-
-                        NativeMethods.CloseHandle(child);
-
-                        if (hr >= 0)
-                        {
-                            // TODO: Support larger output (more than 64K)
-                            var length = 65536;
-                            var buffer = Marshal.AllocHGlobal(length);
-                            NativeMethods.FillMemory(buffer, length, 0x00);
-
-                            var readFileResult = NativeMethods.ReadFile(readPipe, buffer, length - 1, out int read, IntPtr.Zero);
-                            var lastError = Marshal.GetLastWin32Error();
-
-                            var outputContents = new StringBuilder();
-                            outputContents.Append(Marshal.PtrToStringAnsi(buffer, read));
-
-                            Marshal.FreeHGlobal(buffer);
-                            return outputContents.ToString();
-                        }
-                        else
-                            throw new COMException("Cannot obtain output stream", hr);
-                    }
-                    else
-                        throw new COMException("Cannot launch WSL process", hr);
-                }
-                catch { throw; }
-                finally
-                {
-                    NativeMethods.CloseHandle(readPipe);
-                    NativeMethods.CloseHandle(writePipe);
-                }
-            }
-            else
+            if (!NativeMethods.CreatePipe(out IntPtr readPipe, out IntPtr writePipe, ref attributes, 0))
                 throw new Exception("Cannot create pipe for I/O.");
+
+            try
+            {
+                var hr = NativeMethods.WslLaunch(distroName, commandLine, false, stdin, writePipe, stderr, out IntPtr child);
+
+                if (hr < 0)
+                    throw new COMException("Cannot launch WSL process", hr);
+
+                NativeMethods.WaitForSingleObject(child, NativeMethods.INFINITE);
+
+                if ((NativeMethods.GetExitCodeProcess(child, out int exitCode) == false) || (exitCode != 0))
+                    hr = NativeMethods.E_INVALIDARG;
+
+                NativeMethods.CloseHandle(child);
+
+                if (hr < 0)
+                    throw new COMException("Cannot obtain output stream", hr);
+
+                bufferLength = Math.Min(bufferLength, 1024);
+                var bufferPointer = Marshal.AllocHGlobal(bufferLength);
+                var outputContents = new StringBuilder();
+                var encoding = new UTF8Encoding(false);
+                var read = 0;
+
+                while (true)
+                {
+                    if (!NativeMethods.ReadFile(readPipe, bufferPointer, bufferLength, out read, IntPtr.Zero))
+                    {
+                        var lastError = Marshal.GetLastWin32Error();
+                        Marshal.FreeHGlobal(bufferPointer);
+
+                        if (lastError != 0)
+                            throw new Win32Exception(lastError, "Cannot read data from pipe.");
+
+                        break;
+                    }
+
+                    outputContents.Append(encoding.GetString((byte *)bufferPointer.ToPointer(), read));
+
+                    if (read < bufferLength)
+                    {
+                        Marshal.FreeHGlobal(bufferPointer);
+                        break;
+                    }
+                }
+
+                return outputContents.ToString();
+            }
+            finally
+            {
+                NativeMethods.CloseHandle(readPipe);
+                NativeMethods.CloseHandle(writePipe);
+            }
         }
     }
 }
