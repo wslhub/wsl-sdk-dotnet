@@ -20,7 +20,7 @@ Due to the limitation of COM security model requirements of WSL APIs, you can no
 ```csharp
 using Wslhub.Sdk;
 
-// Place the code `Wsl.InitializeSecurityModel()` at the top of your application's `Main()` method.
+// Place the code Wsl.InitializeSecurityModel() at the top of your application's Main() method.
 Wsl.InitializeSecurity();
 
 // Assert WSL installation status
@@ -34,6 +34,10 @@ var queryResults = Wsl.GetDistroQueryResult();
 
 // Run a command
 var result = Wsl.RunWslCommand(distroName, "cat /etc/passwd");
+
+// Run a command with default distro
+var defaultDistro = Wsl.GetDefaultDistro();
+var result = defaultDistro.RunWslCommand("cat /etc/passwd");
 ```
 
 ## Upcoming Features

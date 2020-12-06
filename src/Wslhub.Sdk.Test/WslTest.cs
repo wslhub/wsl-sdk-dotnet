@@ -17,7 +17,7 @@ namespace Wslhub.Sdk.Test
             var distros = Wsl.GetDistroListFromRegistry();
 
             if (distros == null)
-                throw new ArgumentNullException(nameof(distros));
+                throw new Exception("Cannot query registry keys.");
         }
 
         static void Test_QueryDistroInfo()
@@ -31,16 +31,22 @@ namespace Wslhub.Sdk.Test
                 throw new Exception("Cannot query distro properties.");
         }
 
+        static void Test_GetDefaultDistro()
+        {
+            var defaultDistro = Wsl.GetDefaultDistro();
+
+            if (defaultDistro == null)
+                throw new Exception("Cannot find the default distro.");
+        }
+
         static void Test_ExecTest()
         {
-            var distroName = Wsl.GetDistroListFromRegistry().Select(x => x.DistroName).First();
+            var outputContent = Wsl.GetDefaultDistro().RunWslCommand("cat /etc/passwd");
 
-            var result = Wsl.RunWslCommand(distroName, "cat /etc/passwd");
+            if (outputContent == null)
+                throw new ArgumentNullException(nameof(outputContent));
 
-            if (result == null)
-                throw new ArgumentNullException(nameof(result));
-
-            if (result.Length == 0)
+            if (outputContent.Length == 0)
                 throw new Exception("No output.");
         }
     }

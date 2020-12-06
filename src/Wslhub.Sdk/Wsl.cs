@@ -80,6 +80,68 @@ namespace Wslhub.Sdk
                 throw new NotSupportedException("This system does not have wsl.exe CLI.");
         }
 
+        private static DistroRegistryInfo ReadFromRegistryKey(RegistryKey lxssKey, string keyName, Guid? parsedDefaultGuid)
+        {
+            if (!Guid.TryParse(keyName, out Guid parsedGuid))
+                return null;
+
+            using (var distroKey = lxssKey.OpenSubKey(keyName))
+            {
+                var distroName = distroKey.GetValue("DistributionName", default(string)) as string;
+
+                if (string.IsNullOrWhiteSpace(distroName))
+                    return null;
+
+                var basePath = distroKey.GetValue("BasePath", default(string)) as string;
+                var normalizedPath = Path.GetFullPath(basePath);
+
+                var kernelCommandLine = (distroKey.GetValue("KernelCommandLine", default(string)) as string ?? string.Empty);
+                var result = new DistroRegistryInfo()
+                {
+                    DistroId = parsedGuid,
+                    DistroName = distroName,
+                    BasePath = normalizedPath,
+                };
+                result.KernelCommandLine.AddRange(kernelCommandLine.Split(
+                    new char[] { ' ', '\t', },
+                    StringSplitOptions.RemoveEmptyEntries));
+
+                if (parsedDefaultGuid.HasValue && parsedDefaultGuid == parsedGuid)
+                {
+                    result.IsDefault = true;
+                    return result;
+                }
+            }
+
+            return null;
+        }
+
+        public static DistroRegistryInfo GetDefaultDistro()
+        {
+            var currentUser = Registry.CurrentUser;
+            var lxssPath = Path.Combine("SOFTWARE", "Microsoft", "Windows", "CurrentVersion", "Lxss");
+
+            using (var lxssKey = currentUser.OpenSubKey(lxssPath, false))
+            {
+                var defaultGuid = Guid.TryParse(
+                    lxssKey.GetValue("DefaultDistribution", default(string)) as string,
+                    out Guid parsedDefaultGuid) ? parsedDefaultGuid : default(Guid?);
+
+                foreach (var keyName in lxssKey.GetSubKeyNames())
+                {
+                    var info = ReadFromRegistryKey(lxssKey, keyName, defaultGuid);
+
+                    if (info == null)
+                        continue;
+
+                    if (info.IsDefault)
+                        return info;
+                }
+            }
+
+            return null;
+        }
+
         public static IEnumerable<DistroRegistryInfo> GetDistroListFromRegistry()
         {
             var currentUser = Registry.CurrentUser;
@@ -87,43 +149,20 @@ namespace Wslhub.Sdk
 
             using (var lxssKey = currentUser.OpenSubKey(lxssPath, false))
             {
-                var defaultGuid = lxssKey.GetValue("DefaultDistribution", default(string)) as string;
-                var defaultGuidFound = Guid.TryParse(defaultGuid, out Guid parsedDefaultGuid);
-                var results = new List<DistroRegistryInfo>();
+                var defaultGuid = Guid.TryParse(
+                    lxssKey.GetValue("DefaultDistribution", default(string)) as string,
+                    out Guid parsedDefaultGuid) ? parsedDefaultGuid : default(Guid?);
 
                 foreach (var keyName in lxssKey.GetSubKeyNames())
                 {
-                    if (!Guid.TryParse(keyName, out Guid parsedGuid))
+                    var info = ReadFromRegistryKey(lxssKey, keyName, defaultGuid);
+
+                    if (info == null)
                         continue;
 
-                    using (var distroKey = lxssKey.OpenSubKey(keyName))
-                    {
-                        var distroName = distroKey.GetValue("DistributionName", default(string)) as string;
-
-                        if (string.IsNullOrWhiteSpace(distroName))
-                            continue;
-
-                        var basePath = distroKey.GetValue("BasePath", default(string)) as string;
-                        var normalizedPath = Path.GetFullPath(basePath);
-
-                        var kernelCommandLine = (distroKey.GetValue("KernelCommandLine", default(string)) as string ?? string.Empty);
-                        var result = new DistroRegistryInfo()
-                        {
-                            DistroId = parsedGuid,
-                            DistroName = distroName,
-                            BasePath = basePath,
-                        };
-                        result.KernelCommandLine.AddRange(kernelCommandLine.Split(
-                            new char[] { ' ', '\t', },
-                            StringSplitOptions.RemoveEmptyEntries));
-
-                        if (defaultGuidFound && parsedDefaultGuid == parsedGuid)
-                            result.IsDefault = true;
-                        results.Add(result);
-                    }
+                    if (info.IsDefault)
+                        yield return info;
                 }
-
-                return results;
             }
         }
 
