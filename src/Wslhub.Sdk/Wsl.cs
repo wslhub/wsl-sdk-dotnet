@@ -8,8 +8,14 @@ using System.Text;
 
 namespace Wslhub.Sdk
 {
+    /// <summary>
+    /// Provides functionality to help you call WSL from .NET applications.
+    /// </summary>
     public static class Wsl
     {
+        /// <summary>
+        /// Call CoInitializeSecurity so that you can call the WSL API.
+        /// </summary>
         public static void InitializeSecurityModel()
         {
             var result = NativeMethods.CoInitializeSecurity(
@@ -27,6 +33,10 @@ namespace Wslhub.Sdk
                 throw new COMException("Cannot complete CoInitializeSecurity.", result);
         }
 
+        /// <summary>
+        /// Checks if a 64-bit process is running on a 64-bit system.
+        /// </summary>
+        /// <returns>Returns True or False depending on whether or not.</returns>
         private static bool InternalCheckIsWow64()
         {
             var osvi = new NativeMethods.OSVERSIONINFOEXW();
@@ -45,6 +55,9 @@ namespace Wslhub.Sdk
             return false;
         }
 
+        /// <summary>
+        /// Checks if the environment you are running in now supports WSL.
+        /// </summary>
         public static void AssertWslSupported()
         {
             var commonErrorMessage = "Windows Subsystems for Linux requires 64-bit system and latest version of Windows 10 or higher than Windows Server 1709.";
@@ -80,6 +93,13 @@ namespace Wslhub.Sdk
                 throw new NotSupportedException("This system does not have wsl.exe CLI.");
         }
 
+        /// <summary>
+        /// Reads WSL-related information from a registry key and returns it as a model object.
+        /// </summary>
+        /// <param name="lxssKey">Registry key from which to read information.</param>
+        /// <param name="keyName">The GUID name under the LXSS registry key.</param>
+        /// <param name="parsedDefaultGuid">Default distribution's GUID key as recorded in the LXSS registry key.</param>
+        /// <returns>Returns the WSL distribution information obtained through registry information.</returns>
         private static DistroRegistryInfo ReadFromRegistryKey(RegistryKey lxssKey, string keyName, Guid? parsedDefaultGuid)
         {
             if (!Guid.TryParse(keyName, out Guid parsedGuid))
@@ -116,6 +136,13 @@ namespace Wslhub.Sdk
             return null;
         }
 
+        /// <summary>
+        /// Returns information about the default WSL distribution from the registry.
+        /// </summary>
+        /// <returns>
+        /// Returns default WSL distribution information obtained through registry information.
+        /// Returns null if no WSL distro is installed or no distro is set as the default.
+        /// </returns>
         public static DistroRegistryInfo GetDefaultDistro()
         {
             var currentUser = Registry.CurrentUser;
@@ -142,6 +169,10 @@ namespace Wslhub.Sdk
             return null;
         }
 
+        /// <summary>
+        /// Returns information about WSL distributions obtained from the registry without calling the WSL API.
+        /// </summary>
+        /// <returns>Returns a list of information about the searched WSL distributions.</returns>
         public static IEnumerable<DistroRegistryInfo> GetDistroListFromRegistry()
         {
             var currentUser = Registry.CurrentUser;
@@ -166,6 +197,10 @@ namespace Wslhub.Sdk
             }
         }
 
+        /// <summary>
+        /// Get details of WSL distributions reported as installed on the system by calling the WSL API.
+        /// </summary>
+        /// <returns>Returns the list of WSL distributions inquired for detailed information with the WSL API.</returns>
         public unsafe static IEnumerable<DistroInfo> GetDistroQueryResult()
         {
             AssertWslSupported();
@@ -219,6 +254,14 @@ namespace Wslhub.Sdk
             return results;
         }
 
+        /// <summary>
+        /// Execute the specified command through the default shell of a specific WSL distribution, and get the result as a System.IO.Stream object.
+        /// </summary>
+        /// <param name="distroName">The name of the WSL distribution on which to run the command.</param>
+        /// <param name="commandLine">The command you want to run.</param>
+        /// <param name="outputStream">The System.IO.Stream object to receive the results. It must be writable.</param>
+        /// <param name="bufferLength">Specifies the size of the buffer array to use when copying from anonymous pipes to the underlying stream. You do not need to specify a value.</param>
+        /// <returns>Returns the sum of the number of bytes received.</returns>
         public static unsafe long RunWslCommand(string distroName, string commandLine, Stream outputStream, int bufferLength = 65536)
         {
             var isRegistered = NativeMethods.WslIsDistributionRegistered(distroName);
@@ -308,6 +351,16 @@ namespace Wslhub.Sdk
             }
         }
 
+        /// <summary>
+        /// Execute the specified command through the default shell of a specific WSL distribution, and get the result as a string.
+        /// </summary>
+        /// <remarks>
+        /// When receiving data from WSL, it is encoded as UTF-8 data without the byte order mark.
+        /// </remarks>
+        /// <param name="distroName">The name of the WSL distribution on which to run the command.</param>
+        /// <param name="commandLine">The command you want to run.</param>
+        /// <param name="bufferLength">Specifies the size of the buffer array to use when copying from anonymous pipes to the underlying stream. You do not need to specify a value.</param>
+        /// <returns>Returns the collected output string.</returns>
         public static unsafe string RunWslCommand(string distroName, string commandLine, int bufferLength = 65536)
         {
             var isRegistered = NativeMethods.WslIsDistributionRegistered(distroName);

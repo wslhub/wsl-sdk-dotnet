@@ -1,0 +1,219 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Wslhub.Sdk</name>
+    </assembly>
+    <members>
+        <member name="T:Wslhub.Sdk.DistroFlags">
+            <summary>
+            The enumeration specifies the behavior of a distribution in the Windows Subsystem for Linux (WSL).
+            </summary>
+        </member>
+        <member name="F:Wslhub.Sdk.DistroFlags.None">
+            <summary>
+            No flags are being supplied.
+            </summary>
+        </member>
+        <member name="F:Wslhub.Sdk.DistroFlags.EnableInterop">
+            <summary>
+            Allow the distribution to interoperate with Windows processes (for example, the user can invoke "cmd.exe" or "notepad.exe" from within a WSL session).
+            </summary>
+        </member>
+        <member name="F:Wslhub.Sdk.DistroFlags.AppendNtPath">
+            <summary>
+            Add the Windows %PATH% environment variable values to WSL sessions.
+            </summary>
+        </member>
+        <member name="F:Wslhub.Sdk.DistroFlags.EnableDriveMouting">
+            <summary>
+            Automatically mount Windows drives inside of WSL sessions (for example, "C:" will be available under "/mnt/c").
+            </summary>
+        </member>
+        <member name="T:Wslhub.Sdk.DistroInfo">
+            <summary>
+            A model class that contains information obtained by calling the WSL API in addition to information read from the registry.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroInfo.DefaultEnvironmentVariables">
+            <summary>
+            Default environment variables set in the distribution.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroInfo.DefaultUid">
+            <summary>
+            The UID of the user to use when running the distribution.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroInfo.DistroFlags">
+            <summary>
+            Represents the default settings of the distribution.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroInfo.IsRegistered">
+            <summary>
+            Whether the distribution was successfully registered with the WSL.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroInfo.IsDefaultDistro">
+            <summary>
+            Whether or not it is set as the default distribution.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroInfo.WslVersion">
+            <summary>
+            Determine which version of the WSL runtime is configured to use.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroInfo.EnableInterop">
+            <summary>
+            Whether the WSL distribution has been set up to allow interaction with Windows applications.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroInfo.EnableDriveMounting">
+            <summary>
+            Whether the Windows file system can be mounted on the WSL distribution.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroInfo.AppendNtPath">
+            <summary>
+            Whether to also add the Windows PATH environment variable to the WSL distribution's PATH environment variable.
+            </summary>
+        </member>
+        <member name="T:Wslhub.Sdk.DistroRegistryInfo">
+            <summary>
+            A model class that represents information about the WSL distribution registered in the registry.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroRegistryInfo.DistroId">
+            <summary>
+            Unique ID identifying the WSL distribution
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroRegistryInfo.DistroName">
+            <summary>
+            Name of the WSL distribution
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroRegistryInfo.KernelCommandLine">
+            <summary>
+            List of kernel parameters to be passed on cold boot
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroRegistryInfo.BasePath">
+            <summary>
+            The path to the local directory where the WSL distribution is installed.
+            </summary>
+        </member>
+        <member name="P:Wslhub.Sdk.DistroRegistryInfo.IsDefault">
+            <summary>
+            Whether or not registered as the default WSL distribution
+            </summary>
+        </member>
+        <member name="M:Wslhub.Sdk.DistroRegistryInfo.ToString">
+            <summary>
+            Returns a description of this model object.
+            </summary>
+            <returns>Returns a description of this model object.</returns>
+        </member>
+        <member name="T:Wslhub.Sdk.Wsl">
+            <summary>
+            Provides functionality to help you call WSL from .NET applications.
+            </summary>
+        </member>
+        <member name="M:Wslhub.Sdk.Wsl.InitializeSecurityModel">
+            <summary>
+            Call CoInitializeSecurity so that you can call the WSL API.
+            </summary>
+        </member>
+        <member name="M:Wslhub.Sdk.Wsl.InternalCheckIsWow64">
+            <summary>
+            Checks if a 64-bit process is running on a 64-bit system.
+            </summary>
+            <returns>Returns True or False depending on whether or not.</returns>
+        </member>
+        <member name="M:Wslhub.Sdk.Wsl.AssertWslSupported">
+            <summary>
+            Checks if the environment you are running in now supports WSL.
+            </summary>
+        </member>
+        <member name="M:Wslhub.Sdk.Wsl.ReadFromRegistryKey(Microsoft.Win32.RegistryKey,System.String,System.Nullable{System.Guid})">
+            <summary>
+            Reads WSL-related information from a registry key and returns it as a model object.
+            </summary>
+            <param name="lxssKey">Registry key from which to read information.</param>
+            <param name="keyName">The GUID name under the LXSS registry key.</param>
+            <param name="parsedDefaultGuid">Default distribution's GUID key as recorded in the LXSS registry key.</param>
+            <returns>Returns the WSL distribution information obtained through registry information.</returns>
+        </member>
+        <member name="M:Wslhub.Sdk.Wsl.GetDefaultDistro">
+            <summary>
+            Returns information about the default WSL distribution from the registry.
+            </summary>
+            <returns>
+            Returns default WSL distribution information obtained through registry information.
+            Returns null if no WSL distro is installed or no distro is set as the default.
+            </returns>
+        </member>
+        <member name="M:Wslhub.Sdk.Wsl.GetDistroListFromRegistry">
+            <summary>
+            Returns information about WSL distributions obtained from the registry without calling the WSL API.
+            </summary>
+            <returns>Returns a list of information about the searched WSL distributions.</returns>
+        </member>
+        <member name="M:Wslhub.Sdk.Wsl.GetDistroQueryResult">
+            <summary>
+            Get details of WSL distributions reported as installed on the system by calling the WSL API.
+            </summary>
+            <returns>Returns the list of WSL distributions inquired for detailed information with the WSL API.</returns>
+        </member>
+        <member name="M:Wslhub.Sdk.Wsl.RunWslCommand(System.String,System.String,System.IO.Stream,System.Int32)">
+            <summary>
+            Execute the specified command through the default shell of a specific WSL distribution, and get the result as a System.IO.Stream object.
+            </summary>
+            <param name="distroName">The name of the WSL distribution on which to run the command.</param>
+            <param name="commandLine">The command you want to run.</param>
+            <param name="outputStream">The System.IO.Stream object to receive the results. It must be writable.</param>
+            <param name="bufferLength">Specifies the size of the buffer array to use when copying from anonymous pipes to the underlying stream. You do not need to specify a value.</param>
+            <returns>Returns the sum of the number of bytes received.</returns>
+        </member>
+        <member name="M:Wslhub.Sdk.Wsl.RunWslCommand(System.String,System.String,System.Int32)">
+            <summary>
+            Execute the specified command through the default shell of a specific WSL distribution, and get the result as a string.
+            </summary>
+            <remarks>
+            When receiving data from WSL, it is encoded as UTF-8 data without the byte order mark.
+            </remarks>
+            <param name="distroName">The name of the WSL distribution on which to run the command.</param>
+            <param name="commandLine">The command you want to run.</param>
+            <param name="bufferLength">Specifies the size of the buffer array to use when copying from anonymous pipes to the underlying stream. You do not need to specify a value.</param>
+            <returns>Returns the collected output string.</returns>
+        </member>
+        <member name="T:Wslhub.Sdk.WslExtension">
+            <summary>
+            This class contains helper methods that help you call WSL functions using the provided WSL information model object.
+            </summary>
+        </member>
+        <member name="M:Wslhub.Sdk.WslExtension.RunWslCommand(Wslhub.Sdk.DistroRegistryInfo,System.String,System.Int32)">
+            <summary>
+            Execute the specified command through the default shell of a specific WSL distribution, and get the result as a string.
+            </summary>
+            <remarks>
+            When receiving data from WSL, it is encoded as UTF-8 data without the byte order mark.
+            </remarks>
+            <param name="distroInfo">The WSL distribution on which to run the command.</param>
+            <param name="commandLine">The command you want to run.</param>
+            <param name="bufferLength">Specifies the size of the buffer array to use when copying from anonymous pipes to the underlying stream. You do not need to specify a value.</param>
+            <returns>Returns the collected output string.</returns>
+        </member>
+        <member name="M:Wslhub.Sdk.WslExtension.RunWslCommand(Wslhub.Sdk.DistroRegistryInfo,System.String,System.IO.Stream,System.Int32)">
+            <summary>
+            Execute the specified command through the default shell of a specific WSL distribution, and get the result as a System.IO.Stream object.
+            </summary>
+            <param name="distroInfo">The WSL distribution on which to run the command.</param>
+            <param name="commandLine">The command you want to run.</param>
+            <param name="outputStream">The System.IO.Stream object to receive the results. It must be writable.</param>
+            <param name="bufferLength">Specifies the size of the buffer array to use when copying from anonymous pipes to the underlying stream. You do not need to specify a value.</param>
+            <returns>Returns the sum of the number of bytes received.</returns>
+        </member>
+    </members>
+</doc>

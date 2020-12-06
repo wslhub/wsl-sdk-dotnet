@@ -17,6 +17,14 @@
 	  <PackageTags>WSL,SDK</PackageTags>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DocumentationFile>C:\Users\rkttu\Projects\wsl-sdk-dotnet\src\Wslhub.Sdk\Wslhub.Sdk.xml</DocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DocumentationFile>C:\Users\rkttu\Projects\wsl-sdk-dotnet\src\Wslhub.Sdk\Wslhub.Sdk.xml</DocumentationFile>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Win32.Registry" Version="4.7.0" />
   </ItemGroup>
