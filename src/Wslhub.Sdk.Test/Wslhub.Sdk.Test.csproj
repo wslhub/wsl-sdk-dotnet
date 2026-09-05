@@ -1,18 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
-    <StartupObject>Wslhub.Sdk.Test.Program</StartupObject>
+    <TargetFramework>net10.0</TargetFramework>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="Bullseye" Version="3.5.0" />
+    <ProjectReference Include="../Wslhub.Sdk/Wslhub.Sdk.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Wslhub.Sdk\Wslhub.Sdk.csproj" />
-  </ItemGroup>
-
 </Project>

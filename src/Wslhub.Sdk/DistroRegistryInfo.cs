@@ -16,7 +16,7 @@ namespace Wslhub.Sdk
         /// <summary>
         /// Name of the WSL distribution
         /// </summary>
-        public string DistroName { get; internal set; }
+        public string DistroName { get; internal set; } = string.Empty;
 
         /// <summary>
         /// List of kernel parameters to be passed on cold boot
@@ -26,7 +26,7 @@ namespace Wslhub.Sdk
         /// <summary>
         /// The path to the local directory where the WSL distribution is installed.
         /// </summary>
-        public string BasePath { get; internal set; }
+        public string BasePath { get; internal set; } = string.Empty;
 
         /// <summary>
         /// Whether or not registered as the default WSL distribution

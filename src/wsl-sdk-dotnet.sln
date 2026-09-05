@@ -12,6 +12,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		..\README.md = ..\README.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wslhub.Sdk.UnitTests", "..\tests\Wslhub.Sdk.UnitTests\Wslhub.Sdk.UnitTests.csproj", "{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,6 +48,18 @@ Global
 		{D1D84175-AD55-4410-9F1B-1E21DCB736FC}.Release|x64.Build.0 = Release|Any CPU
 		{D1D84175-AD55-4410-9F1B-1E21DCB736FC}.Release|x86.ActiveCfg = Release|Any CPU
 		{D1D84175-AD55-4410-9F1B-1E21DCB736FC}.Release|x86.Build.0 = Release|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Debug|x64.Build.0 = Debug|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Debug|x86.Build.0 = Debug|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Release|x64.ActiveCfg = Release|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Release|x64.Build.0 = Release|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Release|x86.ActiveCfg = Release|Any CPU
+		{7BAC8F87-DCDE-4BD1-B770-A8E137DCA531}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

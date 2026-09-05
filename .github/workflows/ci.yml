@@ -1,0 +1,39 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2025, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore src/wsl-sdk-dotnet.sln
+      - run: dotnet build src/wsl-sdk-dotnet.sln --configuration Release --no-restore
+      - run: dotnet test tests/Wslhub.Sdk.UnitTests --configuration Release --no-build --logger "trx;LogFileName=tests.trx" --results-directory artifacts/tests --blame-hang-timeout 2m
+      - run: dotnet pack src/Wslhub.Sdk --configuration Release --no-build --output artifacts/packages
+      - name: Prepare disposable WSL 1 distributions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/setup-wsl.ps1
+      - name: Run WSL integration tests
+        if: runner.os == 'Windows'
+        run: dotnet run --project src/Wslhub.Sdk.Test --configuration Release --no-build
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: results-${{ matrix.os }}
+          path: artifacts/

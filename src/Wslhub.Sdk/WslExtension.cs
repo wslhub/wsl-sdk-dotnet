@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace Wslhub.Sdk
 {
@@ -19,6 +20,9 @@ namespace Wslhub.Sdk
         /// <returns>Returns the collected output string.</returns>
         public static string RunWslCommand(this DistroRegistryInfo distroInfo, string commandLine, int bufferLength = 65535)
         {
+            if (distroInfo == null)
+                throw new ArgumentNullException(nameof(distroInfo));
+
             return Wsl.RunWslCommand(distroInfo.DistroName, commandLine, bufferLength);
         }
 
@@ -32,6 +36,9 @@ namespace Wslhub.Sdk
         /// <returns>Returns the sum of the number of bytes received.</returns>
         public static long RunWslCommand(this DistroRegistryInfo distroInfo, string commandLine, Stream outputStream, int bufferLength = 65535)
         {
+            if (distroInfo == null)
+                throw new ArgumentNullException(nameof(distroInfo));
+
             return Wsl.RunWslCommand(distroInfo.DistroName, commandLine, outputStream, bufferLength);
         }
     }

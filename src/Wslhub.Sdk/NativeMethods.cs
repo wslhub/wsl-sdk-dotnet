@@ -1,13 +1,12 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using System.Security;
+using Microsoft.Win32.SafeHandles;
 
 namespace Wslhub.Sdk
 {
     internal static class NativeMethods
     {
         // https://github.com/microsoft/WSL/issues/5824#issuecomment-685231813
-        [SecurityCritical]
         [DllImport("ole32.dll",
             ExactSpelling = true,
             CallingConvention = CallingConvention.Winapi)]
@@ -62,7 +61,6 @@ namespace Wslhub.Sdk
             DisableAAA = 0x1000
         }
 
-        [SecurityCritical]
         [DllImport("wslapi.dll",
             CallingConvention = CallingConvention.Winapi,
             CharSet = CharSet.Unicode,
@@ -71,7 +69,6 @@ namespace Wslhub.Sdk
         public static extern bool WslIsDistributionRegistered(
             string distributionName);
 
-        [SecurityCritical]
         [DllImport("wslapi.dll",
             CallingConvention = CallingConvention.Winapi,
             CharSet = CharSet.Unicode,
@@ -85,14 +82,6 @@ namespace Wslhub.Sdk
             out IntPtr defaultEnvironmentVariables,
             [MarshalAs(UnmanagedType.I4)] out int defaultEnvironmentVariableCount);
 
-        [SecurityCritical]
-        [DllImport("kernel32.dll",
-            CallingConvention = CallingConvention.Winapi,
-            ExactSpelling = true,
-            SetLastError = true)]
-        public static extern IntPtr GetCurrentProcess();
-
-        [SecurityCritical]
         [DllImport("wslapi.dll",
             CallingConvention = CallingConvention.Winapi,
             CharSet = CharSet.Unicode,
@@ -104,50 +93,39 @@ namespace Wslhub.Sdk
             string command,
             bool useCurrentWorkingDirectory,
             IntPtr stdIn,
-            IntPtr stdOut,
+            SafeFileHandle stdOut,
             IntPtr stdErr,
-            out IntPtr process);
+            out SafeFileHandle process);
 
-        [SecurityCritical]
-        [DllImport("kernel32.dll",
-            CallingConvention = CallingConvention.Winapi,
-            ExactSpelling = true,
-            SetLastError = true)]
+        [DllImport("ntdll.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
+        public static extern int RtlGetVersion(ref OSVERSIONINFOEXW osvi);
+
+        public const int HANDLE_FLAG_INHERIT = 1;
+        public const int ERROR_BROKEN_PIPE = 109;
+
+        [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool IsWow64Process(
-            [In] IntPtr hProcess,
-            [Out] out bool wow64Process);
+        public static extern bool SetHandleInformation(SafeFileHandle handle, int mask, int flags);
 
-        [SecurityCritical]
-        [DllImport("kernel32.dll",
-            CallingConvention = CallingConvention.Winapi,
-            CharSet = CharSet.Unicode,
-            ExactSpelling = true,
-            SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool GetVersionExW(ref OSVERSIONINFOEXW osvi);
-
-        [SecurityCritical]
         [DllImport("kernel32.dll",
             CallingConvention = CallingConvention.Winapi,
             SetLastError = true,
             ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool CreatePipe(
-            out IntPtr hReadPipe,
-            out IntPtr hWritePipe,
+            out SafeFileHandle hReadPipe,
+            out SafeFileHandle hWritePipe,
             ref SECURITY_ATTRIBUTES lpPipeAttributes,
             [MarshalAs(UnmanagedType.U4)] int nSize);
 
-        [SecurityCritical]
         [DllImport("kernel32.dll",
             CallingConvention = CallingConvention.Winapi,
             SetLastError = true,
             ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool ReadFile(
-            IntPtr hFile,
-            IntPtr lpBuffer,
+            SafeFileHandle hFile,
+            [Out] byte[] lpBuffer,
             [MarshalAs(UnmanagedType.U4)] int nNumberOfBytesToRead,
             [MarshalAs(UnmanagedType.U4)] out int lpNumberOfBytesRead,
             IntPtr lpOverlapped);
@@ -160,7 +138,6 @@ namespace Wslhub.Sdk
             STD_OUTPUT_HANDLE = -11,
             STD_ERROR_HANDLE = -12;
 
-        [SecurityCritical]
         [DllImport("kernel32.dll",
             CallingConvention = CallingConvention.Winapi,
             SetLastError = true,
@@ -171,14 +148,13 @@ namespace Wslhub.Sdk
         public static readonly int
             INFINITE = unchecked((int)0xFFFFFFFF);
 
-        [SecurityCritical]
         [DllImport("kernel32.dll",
             CallingConvention = CallingConvention.Winapi,
             SetLastError = true,
             ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.U4)]
         public static extern int WaitForSingleObject(
-            IntPtr hHandle,
+            SafeFileHandle hHandle,
             [MarshalAs(UnmanagedType.U4)] int dwMilliseconds);
 
         public static readonly int
@@ -187,23 +163,14 @@ namespace Wslhub.Sdk
             WAIT_TIMEOUT = 0x00000102,
             WAIT_FAILED = unchecked((int)0xFFFFFFFF);
 
-        [SecurityCritical]
         [DllImport("kernel32.dll",
             CallingConvention = CallingConvention.Winapi,
             SetLastError = true,
             ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetExitCodeProcess(
-            IntPtr hProcess,
+            SafeFileHandle hProcess,
             [MarshalAs(UnmanagedType.U4)] out int lpExitCode);
-
-        [SecurityCritical]
-        [DllImport("kernel32.dll",
-            CallingConvention = CallingConvention.Winapi,
-            SetLastError = true,
-            ExactSpelling = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool CloseHandle(IntPtr hObject);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         public struct OSVERSIONINFOEXW

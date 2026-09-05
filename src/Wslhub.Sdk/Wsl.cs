@@ -5,6 +5,9 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+#if NET10_0_OR_GREATER
+using System.Runtime.Versioning;
+#endif
 
 namespace Wslhub.Sdk
 {
@@ -18,6 +21,7 @@ namespace Wslhub.Sdk
         /// </summary>
         public static void InitializeSecurityModel()
         {
+            AssertWindows();
             var result = NativeMethods.CoInitializeSecurity(
                 IntPtr.Zero,
                 (-1),
@@ -33,64 +37,60 @@ namespace Wslhub.Sdk
                 throw new COMException("Cannot complete CoInitializeSecurity.", result);
         }
 
-        /// <summary>
-        /// Checks if a 64-bit process is running on a 64-bit system.
-        /// </summary>
-        /// <returns>Returns True or False depending on whether or not.</returns>
-        private static bool InternalCheckIsWow64()
+        /// <summary>Checks the current platform and the presence of WSL components without throwing for unsupported or missing components.</summary>
+        /// <returns>A status describing the first unmet requirement, or <see cref="WslSupportStatus.Available"/>.</returns>
+        /// <remarks>
+        /// Safe to call on non-Windows systems and before COM initialization. Available means that wslapi.dll
+        /// and wsl.exe exist; it does not guarantee that WSL can start or that a distribution is installed.
+        /// </remarks>
+        public static WslSupportStatus GetWslSupportStatus() => GetWslSupportStatus(WslEnvironment.Instance);
+
+        internal static WslSupportStatus GetWslSupportStatus(IWslEnvironment environment)
         {
-            var osvi = new NativeMethods.OSVERSIONINFOEXW();
-            osvi.dwOSVersionInfoSize = (uint)Marshal.SizeOf(osvi);
+            if (!environment.IsWindows)
+                return WslSupportStatus.UnsupportedOperatingSystem;
+            if (!environment.Is64BitOperatingSystem || !environment.Is64BitProcess)
+                return WslSupportStatus.UnsupportedArchitecture;
 
-            if (NativeMethods.GetVersionExW(ref osvi))
-            {
-                if ((osvi.dwMajorVersion == 5 && osvi.dwMinorVersion >= 1) ||
-                    osvi.dwMajorVersion >= 6)
-                {
-                    if (NativeMethods.IsWow64Process(NativeMethods.GetCurrentProcess(), out bool retVal))
-                        return retVal;
-                }
-            }
+            var version = environment.GetOSVersion();
+            if (version == null)
+                return WslSupportStatus.OperatingSystemVersionUnavailable;
+            if (version < new Version(10, 0, 16299))
+                return WslSupportStatus.UnsupportedOperatingSystem;
 
-            return false;
+            if (!environment.FileExists(Path.Combine(environment.SystemDirectory, "wslapi.dll")))
+                return WslSupportStatus.WslApiNotFound;
+            if (!environment.FileExists(Path.Combine(environment.SystemDirectory, "wsl.exe")))
+                return WslSupportStatus.WslExecutableNotFound;
+
+            return WslSupportStatus.Available;
         }
 
-        /// <summary>
-        /// Checks if the environment you are running in now supports WSL.
-        /// </summary>
-        public static void AssertWslSupported()
+        /// <summary>Checks whether this process meets the platform requirements and can find the WSL components.</summary>
+        /// <exception cref="PlatformNotSupportedException">The operating system or process does not meet the platform requirements.</exception>
+        /// <exception cref="NotSupportedException">A WSL component is missing.</exception>
+        public static void AssertWslSupported() => AssertWslSupported(GetWslSupportStatus());
+
+        internal static void AssertWslSupported(WslSupportStatus status)
         {
-            var commonErrorMessage = "Windows Subsystems for Linux requires 64-bit system and latest version of Windows 10 or higher than Windows Server 1709.";
+            switch (status)
+            {
+                case WslSupportStatus.Available:
+                    return;
+                case WslSupportStatus.WslApiNotFound:
+                    throw new NotSupportedException("This system does not have the WSL API (wslapi.dll).");
+                case WslSupportStatus.WslExecutableNotFound:
+                    throw new NotSupportedException("This system does not have wsl.exe CLI.");
+                default:
+                    throw new PlatformNotSupportedException(
+                        "WSL requires a 64-bit process on 64-bit Windows 10 build 16299 or later. Status: " + status);
+            }
+        }
 
-            var is64BitProcess = (IntPtr.Size == 8);
-            var is64BitOperatingSystem = is64BitProcess || InternalCheckIsWow64();
-
-            if (!is64BitOperatingSystem || !is64BitProcess)
-                throw new PlatformNotSupportedException(commonErrorMessage);
-
-            var osvi = new NativeMethods.OSVERSIONINFOEXW();
-            osvi.dwOSVersionInfoSize = (uint)Marshal.SizeOf(osvi);
-
-            if (!NativeMethods.GetVersionExW(ref osvi))
-                throw new PlatformNotSupportedException(commonErrorMessage);
-
-            if (osvi.dwPlatformId != 2)
-                throw new PlatformNotSupportedException(commonErrorMessage);
-
-            if (osvi.dwMajorVersion < 10 ||
-                osvi.dwMinorVersion < 0 ||
-                osvi.dwBuildNumber < 16299)
-                throw new PlatformNotSupportedException(commonErrorMessage);
-
-            var systemDirectory = Path.Combine(
-                Environment.GetEnvironmentVariable("WINDIR"),
-                "system32");
-
-            if (!File.Exists(Path.Combine(systemDirectory, "wslapi.dll")))
-                throw new NotSupportedException("This system does not have WSL enabled.");
-
-            if (!File.Exists(Path.Combine(systemDirectory, "wsl.exe")))
-                throw new NotSupportedException("This system does not have wsl.exe CLI.");
+        private static void AssertWindows()
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                throw new PlatformNotSupportedException("WSL requires Windows.");
         }
 
         /// <summary>
@@ -100,19 +100,28 @@ namespace Wslhub.Sdk
         /// <param name="keyName">The GUID name under the LXSS registry key.</param>
         /// <param name="parsedDefaultGuid">Default distribution's GUID key as recorded in the LXSS registry key.</param>
         /// <returns>Returns the WSL distribution information obtained through registry information.</returns>
-        private static DistroRegistryInfo ReadFromRegistryKey(RegistryKey lxssKey, string keyName, Guid? parsedDefaultGuid)
+#if NET10_0_OR_GREATER
+        [SupportedOSPlatform("windows")]
+#endif
+        internal static DistroRegistryInfo? ReadFromRegistryKey(RegistryKey lxssKey, string keyName, Guid? parsedDefaultGuid)
         {
             if (!Guid.TryParse(keyName, out Guid parsedGuid))
                 return null;
 
             using (var distroKey = lxssKey.OpenSubKey(keyName))
             {
+                if (distroKey == null)
+                    return null;
+
                 var distroName = distroKey.GetValue("DistributionName", default(string)) as string;
 
-                if (string.IsNullOrWhiteSpace(distroName))
+                if (distroName == null || string.IsNullOrWhiteSpace(distroName))
                     return null;
 
                 var basePath = distroKey.GetValue("BasePath", default(string)) as string;
+                if (basePath == null || string.IsNullOrWhiteSpace(basePath))
+                    return null;
+
                 var normalizedPath = Path.GetFullPath(basePath);
 
                 var kernelCommandLine = (distroKey.GetValue("KernelCommandLine", default(string)) as string ?? string.Empty);
@@ -129,11 +138,10 @@ namespace Wslhub.Sdk
                 if (parsedDefaultGuid.HasValue && parsedDefaultGuid == parsedGuid)
                 {
                     result.IsDefault = true;
-                    return result;
                 }
-            }
 
-            return null;
+                return result;
+            }
         }
 
         /// <summary>
@@ -143,27 +151,15 @@ namespace Wslhub.Sdk
         /// Returns default WSL distribution information obtained through registry information.
         /// Returns null if no WSL distro is installed or no distro is set as the default.
         /// </returns>
-        public static DistroRegistryInfo GetDefaultDistro()
+#if NET10_0_OR_GREATER
+        [SupportedOSPlatform("windows")]
+#endif
+        public static DistroRegistryInfo? GetDefaultDistro()
         {
-            var currentUser = Registry.CurrentUser;
-            var lxssPath = Path.Combine("SOFTWARE", "Microsoft", "Windows", "CurrentVersion", "Lxss");
-
-            using (var lxssKey = currentUser.OpenSubKey(lxssPath, false))
+            foreach (var distro in GetDistroListFromRegistry())
             {
-                var defaultGuid = Guid.TryParse(
-                    lxssKey.GetValue("DefaultDistribution", default(string)) as string,
-                    out Guid parsedDefaultGuid) ? parsedDefaultGuid : default(Guid?);
-
-                foreach (var keyName in lxssKey.GetSubKeyNames())
-                {
-                    var info = ReadFromRegistryKey(lxssKey, keyName, defaultGuid);
-
-                    if (info == null)
-                        continue;
-
-                    if (info.IsDefault)
-                        return info;
-                }
+                if (distro.IsDefault)
+                    return distro;
             }
 
             return null;
@@ -173,27 +169,39 @@ namespace Wslhub.Sdk
         /// Returns information about WSL distributions obtained from the registry without calling the WSL API.
         /// </summary>
         /// <returns>Returns a list of information about the searched WSL distributions.</returns>
+#if NET10_0_OR_GREATER
+        [SupportedOSPlatform("windows")]
+#endif
         public static IEnumerable<DistroRegistryInfo> GetDistroListFromRegistry()
         {
+            AssertWindows();
             var currentUser = Registry.CurrentUser;
             var lxssPath = Path.Combine("SOFTWARE", "Microsoft", "Windows", "CurrentVersion", "Lxss");
 
             using (var lxssKey = currentUser.OpenSubKey(lxssPath, false))
             {
-                var defaultGuid = Guid.TryParse(
-                    lxssKey.GetValue("DefaultDistribution", default(string)) as string,
-                    out Guid parsedDefaultGuid) ? parsedDefaultGuid : default(Guid?);
+                foreach (var info in ReadDistroList(lxssKey))
+                    yield return info;
+            }
+        }
 
-                foreach (var keyName in lxssKey.GetSubKeyNames())
-                {
-                    var info = ReadFromRegistryKey(lxssKey, keyName, defaultGuid);
+#if NET10_0_OR_GREATER
+        [SupportedOSPlatform("windows")]
+#endif
+        internal static IEnumerable<DistroRegistryInfo> ReadDistroList(RegistryKey? lxssKey)
+        {
+            if (lxssKey == null)
+                yield break;
 
-                    if (info == null)
-                        continue;
+            var defaultGuid = Guid.TryParse(
+                lxssKey.GetValue("DefaultDistribution", default(string)) as string,
+                out Guid parsedDefaultGuid) ? parsedDefaultGuid : default(Guid?);
 
-                    if (info.IsDefault)
-                        yield return info;
-                }
+            foreach (var keyName in lxssKey.GetSubKeyNames())
+            {
+                var info = ReadFromRegistryKey(lxssKey, keyName, defaultGuid);
+                if (info != null)
+                    yield return info;
             }
         }
 
@@ -201,7 +209,10 @@ namespace Wslhub.Sdk
         /// Get details of WSL distributions reported as installed on the system by calling the WSL API.
         /// </summary>
         /// <returns>Returns the list of WSL distributions inquired for detailed information with the WSL API.</returns>
-        public unsafe static IEnumerable<DistroInfo> GetDistroQueryResult()
+#if NET10_0_OR_GREATER
+        [SupportedOSPlatform("windows")]
+#endif
+        public static IEnumerable<DistroInfo> GetDistroQueryResult()
         {
             AssertWslSupported();
 
@@ -214,6 +225,8 @@ namespace Wslhub.Sdk
                     DistroId = eachItem.DistroId,
                     DistroName = eachItem.DistroName,
                     BasePath = eachItem.BasePath,
+                    IsDefault = eachItem.IsDefault,
+                    IsDefaultDistro = eachItem.IsDefault,
                 };
                 distro.KernelCommandLine.AddRange(eachItem.KernelCommandLine);
                 results.Add(distro);
@@ -238,17 +251,20 @@ namespace Wslhub.Sdk
                 distro.DefaultUid = defaultUserId;
                 distro.DistroFlags = flags;
 
-                var lpEnvironmentVariables = (byte***)environmentVariables.ToPointer();
-
-                for (int i = 0; i < environmentVariableCount; i++)
+                try
                 {
-                    byte** lpArray = lpEnvironmentVariables[i];
-                    var content = Marshal.PtrToStringAnsi(new IntPtr(lpArray));
-                    distro.DefaultEnvironmentVariables.Add(content);
-                    Marshal.FreeCoTaskMem(new IntPtr(lpArray));
+                    for (int i = 0; i < environmentVariableCount; i++)
+                    {
+                        var pointer = Marshal.ReadIntPtr(environmentVariables, i * IntPtr.Size);
+                        distro.DefaultEnvironmentVariables.Add(Marshal.PtrToStringAnsi(pointer) ?? string.Empty);
+                    }
                 }
-
-                Marshal.FreeCoTaskMem(new IntPtr(lpEnvironmentVariables));
+                finally
+                {
+                    for (int i = 0; i < environmentVariableCount; i++)
+                        Marshal.FreeCoTaskMem(Marshal.ReadIntPtr(environmentVariables, i * IntPtr.Size));
+                    Marshal.FreeCoTaskMem(environmentVariables);
+                }
             }
 
             return results;
@@ -262,92 +278,61 @@ namespace Wslhub.Sdk
         /// <param name="outputStream">The System.IO.Stream object to receive the results. It must be writable.</param>
         /// <param name="bufferLength">Specifies the size of the buffer array to use when copying from anonymous pipes to the underlying stream. You do not need to specify a value.</param>
         /// <returns>Returns the sum of the number of bytes received.</returns>
-        public static unsafe long RunWslCommand(string distroName, string commandLine, Stream outputStream, int bufferLength = 65536)
+        public static long RunWslCommand(string distroName, string commandLine, Stream outputStream, int bufferLength = 65536)
         {
-            var isRegistered = NativeMethods.WslIsDistributionRegistered(distroName);
+            if (string.IsNullOrWhiteSpace(distroName))
+                throw new ArgumentException("A distribution name is required.", nameof(distroName));
+            if (commandLine == null)
+                throw new ArgumentNullException(nameof(commandLine));
+            if (outputStream == null)
+                throw new ArgumentNullException(nameof(outputStream));
+            if (!outputStream.CanWrite)
+                throw new ArgumentException("The output stream must be writable.", nameof(outputStream));
+            if (bufferLength <= 0)
+                throw new ArgumentOutOfRangeException(nameof(bufferLength));
 
-            if (!isRegistered)
-                throw new Exception($"{distroName} is not registered distro.");
-
-            var stdin = NativeMethods.GetStdHandle(NativeMethods.STD_INPUT_HANDLE);
-            var stderr = NativeMethods.GetStdHandle(NativeMethods.STD_ERROR_HANDLE);
+            AssertWslSupported();
+            if (!NativeMethods.WslIsDistributionRegistered(distroName))
+                throw new InvalidOperationException($"{distroName} is not a registered distribution.");
 
             var attributes = new NativeMethods.SECURITY_ATTRIBUTES
             {
-                lpSecurityDescriptor = IntPtr.Zero,
+                nLength = Marshal.SizeOf<NativeMethods.SECURITY_ATTRIBUTES>(),
                 bInheritHandle = true,
             };
-            attributes.nLength = Marshal.SizeOf(attributes);
 
-            if (!NativeMethods.CreatePipe(out IntPtr readPipe, out IntPtr writePipe, ref attributes, 0))
-                throw new Exception("Cannot create pipe for I/O.");
+            if (!NativeMethods.CreatePipe(out var readPipe, out var writePipe, ref attributes, 0))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot create pipe for I/O.");
 
-            try
+            using (readPipe)
+            using (writePipe)
             {
-                var hr = NativeMethods.WslLaunch(distroName, commandLine, false, stdin, writePipe, stderr, out IntPtr child);
+                if (!NativeMethods.SetHandleInformation(readPipe, NativeMethods.HANDLE_FLAG_INHERIT, 0))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot configure the output pipe.");
 
-                if (hr < 0)
-                    throw new COMException("Cannot launch WSL process", hr);
+                var stdin = NativeMethods.GetStdHandle(NativeMethods.STD_INPUT_HANDLE);
+                var stderr = NativeMethods.GetStdHandle(NativeMethods.STD_ERROR_HANDLE);
+                var hr = NativeMethods.WslLaunch(distroName, commandLine, false, stdin, writePipe, stderr, out var child);
 
-                NativeMethods.WaitForSingleObject(child, NativeMethods.INFINITE);
-
-                if (!NativeMethods.GetExitCodeProcess(child, out int exitCode))
+                using (child)
                 {
-                    var lastError = Marshal.GetLastWin32Error();
-                    NativeMethods.CloseHandle(child);
-                    throw new Win32Exception(lastError, "Cannot query exit code of the process.");
+                    if (hr < 0)
+                        throw new COMException("Cannot launch WSL process.", hr);
+
+                    // Only the child may retain a writer, so EOF arrives when it closes stdout.
+                    writePipe.Dispose();
+                    // Drain stdout before waiting: otherwise a full pipe prevents the child from exiting.
+                    var length = WslPipe.CopyTo(readPipe, outputStream, bufferLength);
+
+                    if (NativeMethods.WaitForSingleObject(child, NativeMethods.INFINITE) == NativeMethods.WAIT_FAILED)
+                        throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot wait for the WSL process.");
+                    if (!NativeMethods.GetExitCodeProcess(child, out int exitCode))
+                        throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot query the process exit code.");
+                    if (exitCode != 0)
+                        throw new InvalidOperationException($"Process exit code is non-zero: {exitCode}");
+
+                    return length;
                 }
-
-                if (exitCode != 0)
-                {
-                    NativeMethods.CloseHandle(child);
-                    throw new Exception($"Process exit code is non-zero: {exitCode}");
-                }
-
-                NativeMethods.CloseHandle(child);
-                bufferLength = Math.Min(bufferLength, 1024);
-
-                var bufferPointer = Marshal.AllocHGlobal(bufferLength);
-                var pBufferPointer = (byte*)bufferPointer.ToPointer();
-
-                var buffer = new byte[bufferLength];
-
-                var length = 0L;
-                var read = 0;
-
-                while (true)
-                {
-                    if (!NativeMethods.ReadFile(readPipe, bufferPointer, bufferLength, out read, IntPtr.Zero))
-                    {
-                        var lastError = Marshal.GetLastWin32Error();
-                        Marshal.FreeHGlobal(bufferPointer);
-
-                        if (lastError != 0)
-                            throw new Win32Exception(lastError, "Cannot read data from pipe.");
-
-                        break;
-                    }
-
-                    fixed (byte* pBuffer = buffer)
-                    {
-                        Buffer.MemoryCopy(pBufferPointer, pBuffer, read, read);
-                        length += read;
-                    }
-                    outputStream.Write(buffer, 0, read);
-
-                    if (read < bufferLength)
-                    {
-                        Marshal.FreeHGlobal(bufferPointer);
-                        break;
-                    }
-                }
-
-                return length;
-            }
-            finally
-            {
-                NativeMethods.CloseHandle(readPipe);
-                NativeMethods.CloseHandle(writePipe);
             }
         }
 
@@ -361,84 +346,12 @@ namespace Wslhub.Sdk
         /// <param name="commandLine">The command you want to run.</param>
         /// <param name="bufferLength">Specifies the size of the buffer array to use when copying from anonymous pipes to the underlying stream. You do not need to specify a value.</param>
         /// <returns>Returns the collected output string.</returns>
-        public static unsafe string RunWslCommand(string distroName, string commandLine, int bufferLength = 65536)
+        public static string RunWslCommand(string distroName, string commandLine, int bufferLength = 65536)
         {
-            var isRegistered = NativeMethods.WslIsDistributionRegistered(distroName);
-
-            if (!isRegistered)
-                throw new Exception($"{distroName} is not registered distro.");
-
-            var stdin = NativeMethods.GetStdHandle(NativeMethods.STD_INPUT_HANDLE);
-            var stderr = NativeMethods.GetStdHandle(NativeMethods.STD_ERROR_HANDLE);
-
-            var attributes = new NativeMethods.SECURITY_ATTRIBUTES
+            using (var output = new MemoryStream())
             {
-                lpSecurityDescriptor = IntPtr.Zero,
-                bInheritHandle = true,
-            };
-            attributes.nLength = Marshal.SizeOf(attributes);
-
-            if (!NativeMethods.CreatePipe(out IntPtr readPipe, out IntPtr writePipe, ref attributes, 0))
-                throw new Exception("Cannot create pipe for I/O.");
-
-            try
-            {
-                var hr = NativeMethods.WslLaunch(distroName, commandLine, false, stdin, writePipe, stderr, out IntPtr child);
-
-                if (hr < 0)
-                    throw new COMException("Cannot launch WSL process", hr);
-
-                NativeMethods.WaitForSingleObject(child, NativeMethods.INFINITE);
-
-                if (!NativeMethods.GetExitCodeProcess(child, out int exitCode))
-                {
-                    var lastError = Marshal.GetLastWin32Error();
-                    NativeMethods.CloseHandle(child);
-                    throw new Win32Exception(lastError, "Cannot query exit code of the process.");
-                }
-
-                if (exitCode != 0)
-                {
-                    NativeMethods.CloseHandle(child);
-                    throw new Exception($"Process exit code is non-zero: {exitCode}");
-                }
-
-                NativeMethods.CloseHandle(child);
-
-                bufferLength = Math.Min(bufferLength, 1024);
-                var bufferPointer = Marshal.AllocHGlobal(bufferLength);
-                var outputContents = new StringBuilder();
-                var encoding = new UTF8Encoding(false);
-                var read = 0;
-
-                while (true)
-                {
-                    if (!NativeMethods.ReadFile(readPipe, bufferPointer, bufferLength, out read, IntPtr.Zero))
-                    {
-                        var lastError = Marshal.GetLastWin32Error();
-                        Marshal.FreeHGlobal(bufferPointer);
-
-                        if (lastError != 0)
-                            throw new Win32Exception(lastError, "Cannot read data from pipe.");
-
-                        break;
-                    }
-
-                    outputContents.Append(encoding.GetString((byte *)bufferPointer.ToPointer(), read));
-
-                    if (read < bufferLength)
-                    {
-                        Marshal.FreeHGlobal(bufferPointer);
-                        break;
-                    }
-                }
-
-                return outputContents.ToString();
-            }
-            finally
-            {
-                NativeMethods.CloseHandle(readPipe);
-                NativeMethods.CloseHandle(writePipe);
+                RunWslCommand(distroName, commandLine, output, bufferLength);
+                return new UTF8Encoding(false).GetString(output.ToArray());
             }
         }
     }
